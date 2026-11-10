@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Maintenance Reports</title>
+<meta name="theme-color" content="#062B4F">
+<meta name="description" content="TMI-M1 Daily Maintenance Reports">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Maint Reports">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<style>
+  /*
+   * App shell only. It shows the Apps Script web app full screen and makes it installable.
+   * No reports, photos or PINs pass through or are stored here: everything stays in Google Drive / Sheets.
+   */
+  html, body { margin: 0; height: 100%; background: #062B4F; overflow: hidden; }
+  body {
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #fff;
+    /* keep the app clear of the phone's notch, status bar and home bar */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    box-sizing: border-box;
+  }
+  #app { display: block; width: 100%; height: 100%; border: 0; background: #E9EDF0; }
+  #splash {
+    position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: linear-gradient(180deg, #062B4F 0%, #0E4F84 100%); text-align: center; padding: 24px; box-sizing: border-box;
+    transition: opacity .3s;
+  }
+  #splash.gone { opacity: 0; pointer-events: none; }
+  #splash img { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 6px 24px rgba(0,0,0,.3); }
+  #splash h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  #splash p { margin: 0; color: #9FD3F0; font-size: 14px; max-width: 320px; }
+  .spin { width: 26px; height: 26px; border: 3px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: sp .8s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .btn { border: 0; border-radius: 10px; background: #F5B700; color: #1B2430; font: 600 16px system-ui, sans-serif; padding: 12px 22px; cursor: pointer; }
+  .install {
+    position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 5;
+    background: #fff; color: #1B2430; border-radius: 14px; padding: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.35);
+    display: flex; gap: 12px; align-items: center;
+  }
+  .install img { width: 44px; height: 44px; border-radius: 10px; flex: none; }
+  .install .t { flex: 1; font-size: 14px; }
+  .install .t b { display: block; font-size: 15px; }
+  .install .x { background: none; border: 0; font-size: 22px; color: #55636F; cursor: pointer; padding: 4px 8px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<!-- The app itself (Apps Script). -->
+<iframe id="app" title="Maintenance Reports" allow="web-share; clipboard-write; camera; fullscreen" referrerpolicy="no-referrer-when-downgrade"></iframe>
+
+<div id="splash">
+  <img src="icons/icon-192.png" alt="">
+  <h1>Maintenance Reports</h1>
+  <p id="msg">TMI-M1</p>
+  <div class="spin" id="spin"></div>
+  <button class="btn" id="retry" type="button" hidden>Try again</button>
+</div>
+
+<div class="install" id="install" hidden>
+  <img src="icons/icon-192.png" alt="">
+  <div class="t" id="installText"><b>Install the app</b>Opens full screen from your home screen.</div>
+  <button class="btn" id="installBtn" type="button">Install</button>
+  <button class="x" id="installX" type="button" aria-label="Not now">×</button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ============ EDIT THIS ============
+  // Your Apps Script Web app URL: Apps Script editor → Deploy → Manage deployments → copy "Web app URL".
+  // It ends in /exec. It stays the same when you deploy new versions, so you set it once.
+  var APP_URL = 'https://script.google.com/macros/s/AKfycbzUUB-vOQBhE90jMOQAQhUnVp82HZXYSR33FB-duajjv0ljKjSlr9cG4w7cNIcgVIHzcg/exec';
+  // ===================================
+
+  var app = document.getElementById('app');
+  var splash = document.getElementById('splash');
+  var msg = document.getElementById('msg');
+  var spin = document.getElementById('spin');
+  var retry = document.getElementById('retry');
+
+  function fail(text) {
+    spin.hidden = true;
+    msg.textContent = text;
+    retry.hidden = false;
+  }
+
+  function start() {
+    if (!/^https:\/\/script\.google\.com\/(a\/[^/]+\/)?macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(APP_URL)) {
+      fail('Setup needed: paste the Apps Script Web app URL into index.html (APP_URL).');
+      retry.hidden = true;
+      return;
+    }
+    if (!navigator.onLine) { fail('No internet connection. Connect to mobile data or Wi-Fi, then try again.'); return; }
+    spin.hidden = false; retry.hidden = true; msg.textContent = 'Loading…';
+    splash.classList.remove('gone');
+    var loaded = false;
+    app.onload = function () { loaded = true; splash.classList.add('gone'); };
+    app.src = APP_URL + (APP_URL.indexOf('?') < 0 ? '?' : '&') + 'shell=1';
+    // weak signal: offer a retry if Google has not answered in 25 s (the app keeps loading behind it)
+    setTimeout(function () { if (!loaded) { msg.textContent = 'Still loading… The signal may be weak.'; retry.hidden = false; } }, 25000);
+  }
+  retry.onclick = start;
+  window.addEventListener('online', function () { if (!splash.classList.contains('gone')) start(); });
+  start();
+
+  // ---------- "Install the app" prompt ----------
+  var installBox = document.getElementById('install');
+  var installBtn = document.getElementById('installBtn');
+  var installText = document.getElementById('installText');
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  var dismissed = false;
+  try { dismissed = localStorage.getItem('mrp_install_dismissed') === '1'; } catch (e) { /* private mode */ }
+  document.getElementById('installX').onclick = function () {
+    installBox.hidden = true;
+    try { localStorage.setItem('mrp_install_dismissed', '1'); } catch (e) { /* ignore */ }
+  };
+
+  // Android / PC Chrome & Edge: the browser offers a real install.
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferred = e;
+    if (!dismissed && !standalone) installBox.hidden = false;
+  });
+  installBtn.onclick = function () {
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.then(function () { deferred = null; installBox.hidden = true; });
+  };
+  window.addEventListener('appinstalled', function () { installBox.hidden = true; });
+
+  // iPhone / iPad Safari: no install button exists, so show how to add it.
+  var ua = navigator.userAgent;
+  var isIos = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  var isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua);
+  if (isIos && !standalone && !dismissed) {
+    installBtn.hidden = true;
+    installText.innerHTML = isSafari
+      ? '<b>Install the app</b>Tap the Share button <span aria-hidden="true">⬆︎</span>, then <b>Add to Home Screen</b>.'
+      : '<b>Install the app</b>Open this page in <b>Safari</b>, then Share → Add to Home Screen.';
+    setTimeout(function () { installBox.hidden = false; }, 2500);
+  }
+
+  // Offline splash + installability.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { /* fine without it */ }); });
+  }
+})();
+</script>
+</body>
+</html>
